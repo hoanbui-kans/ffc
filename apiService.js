@@ -1,6 +1,7 @@
 const axios = require('axios');
 const client = require('ssi-fcdata');
 const config = require('./config.js');
+const { pusher } = require('./apiPusherService.js');
 
 const apiClient = axios.create({
   baseURL: config.market.ApiUrl,
@@ -18,17 +19,19 @@ async function authenticate() {
     if (response.data.status === 200) {
       const token = "Bearer " + response.data.data.accessToken;
 
+      // Khởi tạo WebSocket
+      client.initStream({ url: config.market.HubUrl, token });
+      client.bind(client.events.onData, async (data) => { 
+        await pusher.trigger(["channel"], "ssi_event", data)
+      });
+      // client.bind(client.events.onConnected, () => client.switchChannel("X-QUOTE:ALL"));
+      client.start();
+
       // Gán token cho mọi request sau này
       apiClient.interceptors.request.use((config) => {
         config.headers.Authorization = token;
         return config;
       });
-
-      // Khởi tạo WebSocket
-      client.initStream({ url: config.market.HubUrl, token });
-      client.bind(client.events.onData, (data) => { console.log("data:", data)});
-      // client.bind(client.events.onConnected, () => client.switchChannel("X-QUOTE:ALL"));
-      client.start();
     } else {
       console.error("Authentication Failed:", response.data.message);
     }

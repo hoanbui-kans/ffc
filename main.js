@@ -13,7 +13,7 @@ const routes = [
   { path: '/IntradayOhlc', api: 'GET_INTRADAY_OHLC', defaultParams: { symbol: 'VN30F1M', fromDate: '15/11/2025', toDate: '15/12/2025', pageIndex: 1, pageSize: 1000, ascending: false } },
   { path: '/DailyIndex', api: 'GET_DAILY_INDEX', defaultParams: { indexId: 'HNX30', fromDate: '11/03/2025', toDate: '11/03/2025', pageIndex: 1, pageSize: 1000, ascending: true } },
   { path: '/DailyStockPrice', api: 'GET_DAILY_STOCKPRICE', defaultParams: { symbol: 'VN30F1M', market: '', fromDate: '01/03/2025', toDate: '11/03/2025', pageIndex: 1, pageSize: 1000 } }
-];
+]; 
 
 // Tạo API endpoints động
 routes.forEach(({ path, api, defaultParams }) => {
