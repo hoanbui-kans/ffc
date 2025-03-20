@@ -16,7 +16,7 @@ var api = {
     GET_INTRADAY_OHLC: "api/v2/Market/IntradayOhlc",
     GET_DAILY_INDEX: "api/v2/Market/DailyIndex",
     GET_DAILY_STOCKPRICE: "api/v2/Market/DailyStockPrice",
-    SIGNALR: "v2.0/signalr"
+    SIGNALR: "v2.0"
 }
 
 function resoleURL(baseURL, query) {
@@ -51,7 +51,7 @@ exports.initStream = function (options) {
     client = new signalr.client(
         url,
         ["FcMarketDataV2Hub"],
-        10,
+        1000,
         true
     );
     client.serviceHandlers.connected = function (connection) {
@@ -125,10 +125,10 @@ exports.unbind = function (event, func) {
  * 
  */
 exports.switchChannel = function (channel) {
-    //eventsListener.removeListener(event, func);
+    // eventsListener.removeListener(event, func);
     client.invoke(
         'FcMarketDataV2Hub',
         'SwitchChannels',
         channel
-      );
+    );
 }
