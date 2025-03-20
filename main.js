@@ -1,6 +1,6 @@
 const express = require('express');
 const { fetchData, authenticate } = require('./apiService');
-const rateLimit = require('express-rate-limit');
+// const rateLimit = require('express-rate-limit');
 const Redis = require("ioredis");
 const { RedisStore } = require("rate-limit-redis"); // Đúng cú pháp import
 const client = require('ssi-fcdata');
@@ -25,43 +25,70 @@ const redisClient = new Redis({
   port: 6379,
 });
 
-const limiter = rateLimit({
-  store: new RedisStore({ 
-    sendCommand: (...args) => redisClient.call(...args),
-  }),
-  windowMs: 1000,
-  max: 1,
-  message: 'Server chỉ xử lý 1 request mỗi giây. Vui lòng đợi!',
-  keyGenerator: () => 'global'
-}); 
+redisClient.on("connect", () => {
+  console.log("✅ Redis connected successfully!");
+});
+
+redisClient.on("error", (err) => {
+  console.error("❌ Redis connection error:", err);
+});
+
+redisClient.on("ready", () => {
+  console.log("🚀 Redis is ready to use!");
+});
+
+redisClient.on("reconnecting", () => {
+  console.warn("🔄 Redis is reconnecting...");
+});
+
+redisClient.on("end", () => {
+  console.warn("⚠️ Redis connection closed.");
+});
+
+// const limiter = rateLimit({
+//   store: new RedisStore({ 
+//     sendCommand: (...args) => redisClient.call(...args),
+//   }),
+//   windowMs: 1000, 
+//   max: 1,
+//   message: 'Server chỉ xử lý 1 request mỗi giây. Vui lòng đợi!',
+//   keyGenerator: () => 'global'
+// }); 
 
 const cacheMiddleware = async (req, res, next) => {
   const cacheKey = `cache:${req.url}`;
-
+  console.log("cacheKey", cacheKey);
   try {
-    // Kiểm tra xem dữ liệu đã có trong cache chưa
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    // Kiểm tra dữ liệu có trong cache không
     const cachedData = await redisClient.get(cacheKey);
     if (cachedData) {
-      console.log("Phục vụ từ cache");
-      return res.json(JSON.parse(cachedData)); // Trả dữ liệu từ cache và bỏ qua các middleware sau
+      return res.json(JSON.parse(cachedData));
     }
 
-    // Nếu chưa có cache, tiếp tục xử lý request và lưu response vào cache
+    // Nếu chưa có cache, tiếp tục request và lưu response vào cache
     const originalSend = res.send;
-    res.send = async function (body) {
-      await redisClient.setEx(cacheKey, 24 * 60 * 60, JSON.stringify(body)); // Cache 24 giờ
+    res.send = function (body) {
+      // Chuyển body về dạng string nếu chưa phải string
+      const responseBody = typeof body === "string" ? body : JSON.stringify(body);
+
+      // Kiểm tra nếu response là lỗi 429 thì không cache
+      if (!responseBody.includes("API calls quota exceeded!")) {
+        redisClient.set(cacheKey, responseBody, "EX", 24 * 60 * 60); // Cache 24 giờ
+      }
+
       originalSend.call(this, body);
     };
 
-    next(); // Tiếp tục xử lý middleware tiếp theo (bao gồm rate limit)
+    next();
   } catch (err) {
     console.error("Cache error:", err);
-    next(); // Nếu Redis gặp lỗi, tiếp tục request như bình thường
+    next(); // Nếu Redis lỗi, tiếp tục request bình thường
   }
 };
 
 app.use(cacheMiddleware);
-app.use(limiter);
+// app.use(limiter);
 
 // Tạo API endpoints động
 routes.forEach(({ path, api, defaultParams }) => {
