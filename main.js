@@ -21,30 +21,8 @@ const routes = [
 ]; 
 
 const redisClient = new Redis({
-  host: "103.221.222.19",
+  host: "localhost",
   port: 6379,
-  password: "XZ$d5OCQ162&Sthm", // Nếu Redis yêu cầu mật khẩu
-  retryStrategy: (times) => Math.min(times * 50, 2000), // Tự động thử lại khi mất kết nối
-});
-
-redisClient.on("connect", () => {
-  console.log("✅ Redis connected successfully!");
-});
-
-redisClient.on("error", (err) => {
-  console.error("❌ Redis connection error:", err);
-});
-
-redisClient.on("ready", () => {
-  console.log("🚀 Redis is ready to use!");
-});
-
-redisClient.on("reconnecting", () => {
-  console.warn("🔄 Redis is reconnecting...");
-});
-
-redisClient.on("end", () => {
-  console.warn("⚠️ Redis connection closed.");
 });
 
 const limiter = rateLimit({
