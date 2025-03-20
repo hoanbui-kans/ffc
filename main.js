@@ -1,9 +1,10 @@
 const express = require('express');
-const { fetchData, authenticate } = require('./apiService');
-// const rateLimit = require('express-rate-limit');
+const { apiClient, authenticate } = require('./apiService');
 const Redis = require("ioredis");
-const { RedisStore } = require("rate-limit-redis"); // Đúng cú pháp import
 const client = require('ssi-fcdata');
+const PQueue = require("p-queue").default;
+
+require('dotenv').config();
 
 const app = express();
 
@@ -20,10 +21,15 @@ const routes = [
   { path: '/DailyStockPrice', api: 'GET_DAILY_STOCKPRICE', defaultParams: { symbol: 'VN30F1M', market: '', fromDate: '01/03/2025', toDate: '11/03/2025', pageIndex: 1, pageSize: 1000 } }
 ]; 
 
-const redisClient = new Redis({
+const config = process.env.REDIS_CONNECT_TYPE == "socket" ? {
+  path: "/home/zroudqkr/redis/redis.sock",
+} : {
   host: "localhost",
   port: 6379,
-});
+}
+
+/* Redis */
+const redisClient = new Redis(config);
 
 redisClient.on("connect", () => {
   console.log("✅ Redis connected successfully!");
@@ -45,15 +51,8 @@ redisClient.on("end", () => {
   console.warn("⚠️ Redis connection closed.");
 });
 
-// const limiter = rateLimit({
-//   store: new RedisStore({ 
-//     sendCommand: (...args) => redisClient.call(...args),
-//   }),
-//   windowMs: 1000, 
-//   max: 1,
-//   message: 'Server chỉ xử lý 1 request mỗi giây. Vui lòng đợi!',
-//   keyGenerator: () => 'global'
-// }); 
+/* PQueue */
+const queue = new PQueue({ interval: 1000, intervalCap: 1 });
 
 const cacheMiddleware = async (req, res, next) => {
   const cacheKey = `cache:${req.url}`;
@@ -68,6 +67,7 @@ const cacheMiddleware = async (req, res, next) => {
 
     // Nếu chưa có cache, tiếp tục request và lưu response vào cache
     const originalSend = res.send;
+
     res.send = function (body) {
       // Chuyển body về dạng string nếu chưa phải string
       const responseBody = typeof body === "string" ? body : JSON.stringify(body);
@@ -83,18 +83,54 @@ const cacheMiddleware = async (req, res, next) => {
     next();
   } catch (err) {
     console.error("Cache error:", err);
-    next(); // Nếu Redis lỗi, tiếp tục request bình thường
+    next(); 
   }
 };
 
 app.use(cacheMiddleware);
 // app.use(limiter);
 
+async function fetchData (path, queryParams, res, cacheKey) {
+  try {
+    const response = await apiClient.get(path, { params: queryParams });
+    const { data } = response;
+    if(data && data.status == "Success"){
+      console.log('data', JSON.stringify(data))
+      redisClient.setex(cacheKey, 24 * 60 * 60, JSON.stringify(data)); // Cache 1 giây
+      return res.json(data);
+    } else {
+      queue.add(async() => {
+        await fetchData(path, queryParams, res, cacheKey);
+      })
+    }
+  } catch (error) {
+    console.error("❌ API Error:", error.message);
+    return res.status(500).json({ message: "Lỗi server khi gọi API." });
+  }
+}
+
 // Tạo API endpoints động
 routes.forEach(({ path, api, defaultParams }) => {
-  app.get(path, (req, res) => {
+  app.get(path, async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    fetchData(client.api[api], { ...defaultParams, ...req.query }, res);
+    const cacheKey = `cache:${path}:${JSON.stringify(req.query)}`;
+    const queryParams = { ...defaultParams, ...req.query };
+    try {
+      const cachedData = await redisClient.get(cacheKey);
+      if (cachedData) {
+        const parserCache = JSON.parse(cachedData);
+        if(parserCache.data) {
+          console.log("🚀 Phục vụ từ cache (1s)");
+          return res.json();
+        }
+      }
+      queue.add(async() => {
+        await fetchData(client.api[api], queryParams, res, cacheKey, 0);
+      })
+    } catch (err) {
+      console.error("Redis error:", err);
+      await fetchData(client.api[api], queryParams, res, cacheKey, 0);
+    }
   });
 });
  

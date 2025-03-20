@@ -44,14 +44,14 @@ async function authenticate() {
 }
 
 // Hàm gửi request chung
-async function fetchData(apiEndpoint, queryParams, res) {
-  try {
-    const response = await apiClient.get(apiEndpoint, { params: queryParams });
-    res.json(response.data);
-  } catch (error) {
-    console.error("API Error:", error.message);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-}
+// async function fetchData(apiEndpoint, queryParams, res) {
+//   try {
+//     const response = await apiClient.get(apiEndpoint, { params: queryParams });
+//     res.json(response.data);
+//   } catch (error) {
+//     console.error("API Error:", error.message);
+//     res.status(500).json({ error: "Internal Server Error" });
+//   }
+// }
 
-module.exports = { fetchData, authenticate };
+module.exports = { apiClient, authenticate };
